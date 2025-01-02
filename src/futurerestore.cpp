@@ -163,7 +163,7 @@ futurerestore::futurerestore(bool isUpdateInstall, bool isPwnDfu, bool noIBSS, b
                              bool noRestore, bool noRSEP) : _isUpdateInstall(isUpdateInstall), _isPwnDfu(isPwnDfu), _noIBSS(noIBSS),
                                                _setNonce(setNonce), _serial(serial), _noRestore(noRestore), _noRSEP(noRSEP) {
     _client = idevicerestore_client_new();
-    retassure(_client != nullptr, "Could not create idevicerestore client\n");
+    retassure(_client != nullptr, "无法创建idevicerestore客户端\n");
 #ifdef WIN32
     struct _stat64 st{0};
 #else
@@ -221,9 +221,9 @@ bool futurerestore::init() {
 //    If device is in an invalid state, don't check if it supports img4
     if ((_didInit = check_mode(_client) != _MODE_UNKNOWN)) {
         if (!(_client->image4supported = is_image4_supported(_client))) {
-            info("[INFO] 32-bit device detected\n");
+            info("[信息] 已检测到32位设备\n");
         } else {
-            info("[INFO] 64-bit device detected\n");
+            info("[信息] 已检测到64位设备\n");
         }
     }
     if(_client) {
@@ -240,12 +240,12 @@ bool futurerestore::init() {
 }
 
 uint64_t futurerestore::getDeviceEcid() const {
-    retassure(_didInit, "did not init\n");
+    retassure(_didInit, "未初始化\n");
     return _client->ecid;
 }
 
 int futurerestore::getDeviceMode(bool reRequest) const {
-    retassure(_didInit, "did not init\n");
+    retassure(_didInit, "未初始化\n");
     if (!reRequest && _client->mode && _client->mode->index != _MODE_UNKNOWN) {
         return _client->mode->index;
     } else {
@@ -256,26 +256,26 @@ int futurerestore::getDeviceMode(bool reRequest) const {
 }
 
 void futurerestore::putDeviceIntoRecovery() {
-    retassure(_didInit, "did not init\n");
+    retassure(_didInit, "未初始化\n");
 
 #ifdef HAVE_LIBIPATCHER
     _enterPwnRecoveryRequested = _isPwnDfu;
 #endif
 
     getDeviceMode(false);
-    info("Found device in %s mode\n", _client->mode->string);
+    info("已在%s模式找到设备\n", _client->mode->string);
     if (_client->mode == MODE_NORMAL) {
         irecv_device_event_subscribe(&_client->irecv_e_ctx, irecv_event_cb, _client);
         idevice_event_subscribe(idevice_event_cb, _client);
         _client->idevice_e_ctx = (void *) idevice_event_cb;
 #ifdef HAVE_LIBIPATCHER
-        retassure(!_isPwnDfu, "isPwnDfu enabled, but device was found in normal mode\n");
+        retassure(!_isPwnDfu, "已启用PwnDfu，但发现设备处于正常模式\n");
 #endif
-        info("Entering recovery mode...\n");
-        retassure(!normal_enter_recovery(_client), "Unable to place device into recovery mode from %s mode\n",
+        info("正在进入恢复模式...\n");
+        retassure(!normal_enter_recovery(_client), "无法将设备从%s模式置于恢复模式\n",
                   _client->mode->string);
     } else if (_client->mode == MODE_RECOVERY) {
-        info("Device already in recovery mode\n");
+        info("设备已处于恢复模式\n");
     } else if (_client->mode == MODE_DFU && _isPwnDfu &&
                #ifdef HAVE_LIBIPATCHER
                true
@@ -283,11 +283,11 @@ void futurerestore::putDeviceIntoRecovery() {
         false
 #endif
             ) {
-        info("requesting to get into pwnRecovery later\n");
+        info("正在请求稍后进入破解恢复模式\n");
     } else if (!_client->image4supported) {
-        info("32-bit device in DFU mode found, assuming user wants to use iOS 9.x re-restore bug. Not failing here\n");
+        info("在DFU模式下发现32位设备，假设用户希望使用iOS 9.x re-restore bug，这里没有失败\n");
     } else {
-        reterror("unsupported device mode, please put device in recovery or normal mode\n");
+        reterror("不支持的设备模式，请将设备置于恢复或正常模式\n");
     }
     safeFree(_client->udid); //only needs to be freed manually when function didn't throw exception
 
@@ -297,13 +297,13 @@ void futurerestore::putDeviceIntoRecovery() {
 }
 
 void futurerestore::setAutoboot(bool val) const {
-    retassure(_didInit, "did not init\n");
+    retassure(_didInit, "未初始化\n");
 
-    retassure(getDeviceMode(false) == _MODE_RECOVERY, "can't set auto-boot, when device isn't in recovery mode\n");
+    retassure(getDeviceMode(false) == _MODE_RECOVERY, "设备未处于恢复模式时，无法设置auto-boot\n");
     if (!_client->recovery) {
-        retassure(!recovery_client_new(_client), "Could not connect to device in recovery mode.\n");
+        retassure(!recovery_client_new(_client), "无法在恢复模式下连接到设备\n");
     }
-    retassure(!recovery_set_autoboot(_client, val), "Setting auto-boot failed?!\n");
+    retassure(!recovery_set_autoboot(_client, val), "设置auto-boot失败？！\n");
 }
 
 void futurerestore::exitRecovery() const {
@@ -313,23 +313,23 @@ void futurerestore::exitRecovery() const {
 }
 
 plist_t futurerestore::nonceMatchesApTickets() {
-    retassure(_didInit, "did not init\n");
+    retassure(_didInit, "未初始化\n");
 
     if (getDeviceMode(true) != _MODE_RECOVERY) {
         if (getDeviceMode(false) != _MODE_DFU || *_client->version != '9')
-            reterror("Device is not in recovery mode, can't check ApNonce\n");
+            reterror("设备未处于恢复模式，无法检查ApNonce\n");
         else
-            _rerestoreiOS9 = (info("Detected iOS 9.x 32-bit re-restore, proceeding in DFU mode\n"), true);
+            _rerestoreiOS9 = (info("检测到iOS 9.x 32位re-restore，正在以DFU模式执行\n"), true);
     }
 
     unsigned char *realnonce;
     int realNonceSize = 0;
     if (_rerestoreiOS9) {
-        info("Skipping ApNonce check\n");
+        info("正在跳过ApNonce检查\n");
     } else {
         recovery_get_ap_nonce(_client, &realnonce, &realNonceSize);
 
-        info("Got ApNonce from device: ");
+        info("从设备上获取的ApNonce: ");
         int i = 0;
         for (i = 0; i < realNonceSize; i++) {
             info("%02x ", ((unsigned char *) realnonce)[i]);
@@ -376,7 +376,7 @@ plist_t futurerestore::nonceMatchesApTickets() {
 std::pair<const char *, size_t> futurerestore::nonceMatchesIM4Ms() {
     retassure(_didInit, "did not init\n");
 
-    retassure(getDeviceMode(true) == _MODE_RECOVERY, "Device is not in recovery mode, can't check ApNonce\n");
+    retassure(getDeviceMode(true) == _MODE_RECOVERY, "设备未处于恢复模式，无法检查ApNonce\n");
 
     unsigned char *realnonce;
     int realNonceSize = 0;
@@ -410,7 +410,7 @@ std::pair<const char *, size_t> futurerestore::nonceMatchesIM4Ms() {
 }
 
 void futurerestore::waitForNonce(std::vector<const char *> nonces, size_t nonceSize) {
-    retassure(_didInit, "did not init\n");
+    retassure(_didInit, "未初始化\n");
     setAutoboot(false);
 
     unsigned char *realnonce;
@@ -432,10 +432,10 @@ void futurerestore::waitForNonce(std::vector<const char *> nonces, size_t nonceS
             usleep(1 * USEC_PER_SEC);
         }
         while (getDeviceMode(true) != _MODE_RECOVERY) usleep(USEC_PER_SEC * 0.5);
-        retassure(!recovery_client_new(_client), "Could not connect to device in recovery mode\n");
+        retassure(!recovery_client_new(_client), "无法在恢复模式下连接到设备\n");
 
         recovery_get_ap_nonce(_client, &realnonce, &realNonceSize);
-        info("Got ApNonce from device: ");
+        info("从设备上获取的ApNonce: ");
         for (int i = 0; i < realNonceSize; i++) {
             info("%02x ", realnonce[i]);
         }
@@ -444,7 +444,7 @@ void futurerestore::waitForNonce(std::vector<const char *> nonces, size_t nonceS
             if (memcmp(realnonce, (unsigned const char *) nonces[i], realNonceSize) == 0) _foundnonce = i;
         }
     } while (_foundnonce == -1);
-    info("Device has requested ApNonce now\n");
+    info("设备已请求ApNonce\n");
 
     setAutoboot(true);
 }
@@ -455,14 +455,14 @@ void futurerestore::waitForNonce() {
     size_t nonceSize = 0;
     std::vector<const char *> nonces;
 
-    retassure(_client->image4supported, "Error: ApNonce collision function is not supported on 32-bit devices\n");
+    retassure(_client->image4supported, "错误：32位设备不支持ApNonce collision功能\n");
 
     for (auto im4m: _im4ms) {
         auto nonce = img4tool::getValFromIM4M({im4m.first, im4m.second}, 'BNCH');
         if (!nonceSize) {
             nonceSize = nonce.payloadSize();
         }
-        retassure(nonceSize == nonce.payloadSize(), "Nonces have different lengths!");
+        retassure(nonceSize == nonce.payloadSize(), "Nonce有不同的长度！");
         nonces.push_back((const char *) nonce.payload());
     }
 
@@ -479,9 +479,9 @@ void futurerestore::loadAPTickets(const std::vector<const char *> &apticketPaths
         struct stat fst{};
 #endif
 #ifdef WIN32
-        retassure(!_stat64(apticketPath, &fst), "failed to load APTicket at %s\n", apticketPath);
+        retassure(!_stat64(apticketPath, &fst), "在%s加载APTicket失败\n", apticketPath);
 #else
-        retassure(!stat(apticketPath, &fst), "failed to load APTicket at %s\n", apticketPath);
+        retassure(!stat(apticketPath, &fst), "在%s加载APTicket失败\n", apticketPath);
 #endif
 
         gzFile zf = gzopen(apticketPath, "rb");
@@ -494,7 +494,7 @@ void futurerestore::loadAPTickets(const std::vector<const char *> &apticketPaths
             char *p = bin;
             do {
                 int bytes_read = gzread(zf, p, readsize);
-                retassure(bytes_read > 0, "Error reading gz compressed data\n");
+                retassure(bytes_read > 0, "读取gz压缩数据时出错\n");
                 blen += bytes_read;
                 if (bytes_read < readsize) {
                     if (gzeof(zf)) {
@@ -535,25 +535,25 @@ void futurerestore::loadAPTickets(const std::vector<const char *> &apticketPaths
         uint64_t im4msize = 0;
         plist_get_data_val(ticket, &im4m, &im4msize);
 
-        retassure(im4msize, "Error: failed to load signing ticket file %s\n", apticketPath);
+        retassure(im4msize, "错误：加载Ticket文件%s失败\n", apticketPath);
 
         _im4ms.emplace_back(im4m, im4msize);
         _aptickets.push_back(apticket);
-        printf("reading signing ticket %s is done\n", apticketPath);
+        printf("读取签名Ticket %s完成\n", apticketPath);
     }
 }
 
 uint64_t futurerestore::getBasebandGoldCertIDFromDevice() const {
     if (!_client->preflight_info) {
         if (normal_get_preflight_info(_client, &_client->preflight_info) == -1) {
-            printf("[WARNING] failed to read BasebandGoldCertID from device! Is it already in recovery?\n");
+            printf("[警告] 无法从设备读取基带GoldCertID！是否已进入恢复模式？\n");
             return 0;
         }
     }
     plist_t node;
     node = plist_dict_get_item(_client->preflight_info, "CertID");
     if (!node || plist_get_node_type(node) != PLIST_UINT) {
-        debug("Unable to find required BbGoldCertId in parameters\n");
+        debug("在参数中找不到所需的BbGoldCertId\n");
         return 0;
     }
     uint64_t val = 0;
@@ -564,10 +564,10 @@ uint64_t futurerestore::getBasebandGoldCertIDFromDevice() const {
 char *futurerestore::getiBootBuild() {
     if (!_ibootBuild) {
         if (_client->recovery == nullptr) {
-            retassure(!recovery_client_new(_client), "Error: can't create new recovery client");
+            retassure(!recovery_client_new(_client), "错误：无法创建新的恢复客户端");
         }
         irecv_getenv(_client->recovery->client, "build-version", &_ibootBuild);
-        retassure(_ibootBuild, "Error: can't get a build-version");
+        retassure(_ibootBuild, "错误：无法获取build版本");
     }
     return _ibootBuild;
 }
@@ -580,11 +580,11 @@ getIPSWComponent(struct idevicerestore_client_t *client, plist_t build_identity,
 
     if (!(char *) path) {
         retassure(!build_identity_get_component_path(build_identity, component.c_str(), &path),
-                  "ERROR: Unable to get path for component '%s'\n", component.c_str());
+                  "错误：无法获取组件'%s'的路径\n", component.c_str());
     }
 
     retassure(!extract_component(client->ipsw, (char *) path, &component_data, &component_size),
-              "ERROR: Unable to extract component: %s\n", component.c_str());
+              "错误：无法提取组件: %s\n", component.c_str());
 
     return {(char *) component_data, component_size};
 }
@@ -616,11 +616,11 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
     mutex_lock(&_client->device_event_mutex);
     cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 1000);
     retassure(((_client->mode == MODE_DFU) || (mutex_unlock(&_client->device_event_mutex), 0)),
-              "Device isn't in DFU mode!");
+              "设备未处于DFU模式！");
     retassure(((dfu_client_new(_client) == IRECV_E_SUCCESS) || (mutex_unlock(&_client->device_event_mutex), 0)),
               "Failed to connect to device in DFU Mode!");
     mutex_unlock(&_client->device_event_mutex);
-    info("Device found in DFU Mode.\n");
+    info("设备已处于DFU模式！\n");
 
     ibss_name.append(getDeviceBoardNoCopy());
     ibec_name.append(getDeviceBoardNoCopy());
@@ -642,10 +642,10 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
             fseek(ibss, 0, SEEK_END);
             iBSS.second = ftell(ibss);
             fseek(ibss, 0, SEEK_SET);
-            retassure(iBSS.first = (char *)alloc.allocate(iBSS.second), "failed to allocate memory for Rose\n");
+            retassure(iBSS.first = (char *)alloc.allocate(iBSS.second), "为Rose分配内存失败\n");
             size_t freadRet = 0;
             retassure((freadRet = fread((char *) iBSS.first, 1, iBSS.second, ibss)) == iBSS.second,
-                      "failed to load iBSS. size=%zu but fread returned %zu\n", iBSS.second, freadRet);
+                      "加载iBSS失败，size=%zu 但fread返回了%zu\n", iBSS.second, freadRet);
             fclose(ibss);
             cache1 = true;
         }
@@ -654,10 +654,10 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
             fseek(ibec, 0, SEEK_END);
             iBEC.second = ftell(ibec);
             fseek(ibec, 0, SEEK_SET);
-            retassure(iBEC.first = (char *)alloc.allocate(iBEC.second), "failed to allocate memory for Rose\n");
+            retassure(iBEC.first = (char *)alloc.allocate(iBEC.second), "为Rose分配内存失败\n");
             size_t freadRet = 0;
             retassure((freadRet = fread((char *) iBEC.first, 1, iBEC.second, ibec)) == iBEC.second,
-                      "failed to load iBEC. size=%zu but fread returned %zu\n", iBEC.second, freadRet);
+                      "加载iBEC失败，size=%zu但fread返回了%zu\n", iBEC.second, freadRet);
             fclose(ibec);
             cache2 = true;
         }
