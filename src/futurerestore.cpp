@@ -667,7 +667,7 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
     if (!cache1 && !cache2) {
         try {
             std::string board = getDeviceBoardNoCopy();
-            info("Getting firmware keys for: %s\n", board.c_str());
+            info("正在获取固件密钥: %s\n", board.c_str());
             if (board == "n71ap" || board == "n71map" || board == "n69ap" || board == "n69uap" || board == "n66ap" ||
                 board == "n66map") {
                 if (!_noIBSS && !cache1) {
@@ -687,17 +687,17 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
                 }
             }
         } catch (tihmstar::exception &e) {
-            reterror("getting keys failed with error: %d (%s). Are keys publicly available?", e.code(), e.what());
+            reterror("获取密钥失败，错误为: %d (%s)密钥是否公开？", e.code(), e.what());
         }
     }
 
     if (!iBSS.first && !_noIBSS) {
-        info("Patching iBSS\n");
+        info("正在修补iBSS\n");
         iBSS = getIPSWComponent(_client, build_identity, "iBSS");
         iBSS = std::move(libipatcher::patchiBSS((char *) iBSS.first, iBSS.second, iBSSKeys));
     }
     if (!iBEC.first) {
-        info("Patching iBEC\n");
+        info("正在修补iBEC\n");
         iBEC = getIPSWComponent(_client, build_identity, "iBEC");
         iBEC = std::move(libipatcher::patchiBEC((char *) iBEC.first, iBEC.second, iBECKeys, std::move(bootargs)));
     }
@@ -706,23 +706,23 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
         /* if this is 64-bit, we need to back IM4P to IMG4
            also due to the nature of iBoot64Patchers sigpatches we need to stich a valid signed im4m to it (but nonce is ignored) */
         if (!cache1 && !_noIBSS) {
-            info("Repacking patched iBSS as IMG4\n");
+            info("正在将已修补的iBSS重新封装为IMG4\n");
             iBSS = std::move(libipatcher::packIM4PToIMG4(iBSS.first, iBSS.second, _im4ms[0].first, _im4ms[0].second));
         }
         if (!cache2) {
-            info("Repacking patched iBEC as IMG4\n");
+            info("正在将已修补的iBEC重新封装为IMG4\n");
             iBEC = std::move(libipatcher::packIM4PToIMG4(iBEC.first, iBEC.second, _im4ms[0].first, _im4ms[0].second));
         }
     }
 
     if (!_noIBSS) {
-        retassure(ibss = fopen(ibss_name.c_str(), "wb"), "can't save patched ibss at %s\n", ibss_name.c_str());
-        retassure(rv = fwrite(iBSS.first, iBSS.second, 1, ibss), "can't save patched ibss at %s\n", ibss_name.c_str());
+        retassure(ibss = fopen(ibss_name.c_str(), "wb"), "无法将已修补的ibss保存在%s\n", ibss_name.c_str());
+        retassure(rv = fwrite(iBSS.first, iBSS.second, 1, ibss), "无法将已修补的ibss保存在%s\n", ibss_name.c_str());
         fflush(ibss);
         fclose(ibss);
     }
-    retassure(ibec = fopen(ibec_name.c_str(), "wb"), "can't save patched ibec at %s\n", ibec_name.c_str());
-    retassure(rv = fwrite(iBEC.first, iBEC.second, 1, ibec), "can't save patched ibec at %s\n", ibec_name.c_str());
+    retassure(ibec = fopen(ibec_name.c_str(), "wb"), "无法将已修补的ibec保存在%s\n", ibec_name.c_str());
+    retassure(rv = fwrite(iBEC.first, iBEC.second, 1, ibec), "无法将已修补的ibec保存在%s\n", ibec_name.c_str());
     fflush(ibec);
     fclose(ibec);
 
@@ -730,62 +730,62 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
     irecv_error_t err = IRECV_E_UNKNOWN_ERROR;
     if (!_noIBSS) {
         /* send iBSS */
-        info("Sending %s (%lu bytes)...\n", "iBSS", iBSS.second);
+        info("正在发送 %s (%lu 字节)...\n", "iBSS", iBSS.second);
         mutex_lock(&_client->device_event_mutex);
         err = irecv_send_buffer(_client->dfu->client, (unsigned char *) (char *) iBSS.first,
                                 (unsigned long) iBSS.second, 1);
-        retassure(err == IRECV_E_SUCCESS, "ERROR: Unable to send %s component: %s\n", "iBSS", irecv_strerror(err));
+        retassure(err == IRECV_E_SUCCESS, "错误：无法发送%s组件: %s\n", "iBSS", irecv_strerror(err));
 
-        info("Booting iBSS, waiting for device to disconnect...\n");
+        info("正在启动iBSS，等待设备断开连接...\n");
         cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
 
         retassure(((_client->mode == MODE_UNKNOWN) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBSS. Reset device and try again");
-        info("Booting iBSS, waiting for device to reconnect...\n");
+                  "设备未断开连接，iBSS可能无效。请重置设备并重试");
+        info("正在启动iBSS，等待设备重新连接...\n");
     }
     bool dfu = false;
     if ((_client->device->chip_id >= 0x7000 && _client->device->chip_id <= 0x8004) ||
         (_client->device->chip_id >= 0x8900 && _client->device->chip_id <= 0x8965)) {
         cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
         retassure(((_client->mode == MODE_DFU) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                  "Device did not reconnect. Possibly invalid iBSS. Reset device and try again");
+                  "设备未重新连接，iBSS可能无效。请重置设备并重试");
         if (_client->build_major > 8) {
             mutex_unlock(&_client->device_event_mutex);
             getDeviceMode(true);
             retassure(((dfu_client_new(_client) == IRECV_E_SUCCESS) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Failed to connect to device in DFU Mode!");
-            retassure(irecv_usb_set_configuration(_client->dfu->client, 1) >= 0, "ERROR: set configuration failed\n");
+                      "在DFU模式下连接到设备失败！");
+            retassure(irecv_usb_set_configuration(_client->dfu->client, 1) >= 0, "错误：设置配置失败\n");
             /* send iBEC */
-            info("Sending %s (%lu bytes)...\n", "iBEC", iBEC.second);
+            info("正在发送 %s (%lu 字节)...\n", "iBEC", iBEC.second);
             mutex_lock(&_client->device_event_mutex);
             err = irecv_send_buffer(_client->dfu->client, (unsigned char *) (char *) iBEC.first,
                                     (unsigned long) iBEC.second, 1);
-            retassure(err == IRECV_E_SUCCESS, "ERROR: Unable to send %s component: %s\n", "iBEC", irecv_strerror(err));
+            retassure(err == IRECV_E_SUCCESS, "错误：无法发送%s组件: %s\n", "iBEC", irecv_strerror(err));
 
-            info("Booting iBEC, waiting for device to disconnect...\n");
+            info("正在启动iBEC，等待设备断开连接...\n");
             cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
 
 #if __aarch64__
             retassure(((_client->mode == MODE_UNKNOWN) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not disconnect. Possibly invalid iBEC. If you're using a USB-C to Lightning cable, switch to USB-A to Lightning (see issue #67)");
+                      "设备未断开连接，iBEC可能无效。如果您使用的是USB-C转Lightning电缆，请切换到USB-a转Lightning (参考 #67)");
 #else
             retassure(((_client->mode == MODE_UNKNOWN) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not disconnect. Possibly invalid iBEC. Reset device and try again");
+                      "设备未断开连接，iBEC可能无效。请重置设备并重试");
 #endif
-            info("Booting iBEC, waiting for device to reconnect...\n");
+            info("正在启动iBEC，等待设备重新连接...\n");
             cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
 #if __aarch64__
             retassure(((_client->mode == MODE_RECOVERY) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not reconnect. Possibly invalid iBEC. If you're using a USB-C to Lightning cable, switch to USB-A to Lightning (see issue #67)");
+                      "设备未重新连接，iBEC可能无效。如果您使用的是USB-C转Lightning电缆，请切换到USB-a转Lightning (参考 #67)");
 #else
             retassure(((_client->mode == MODE_RECOVERY) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not reconnect. Possibly invalid iBEC. Reset device and try again");
+                      "设备未重新连接，iBEC可能无效。请重置设备并重试");
 #endif
             mutex_unlock(&_client->device_event_mutex);
             getDeviceMode(true);
             retassure(((recovery_client_new(_client) == IRECV_E_SUCCESS) ||
                        (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Failed to connect to device in Recovery Mode!");
+                      "在恢复模式下连接到设备失败！");
         }
     } else if ((_client->device->chip_id >= 0x8006 && _client->device->chip_id <= 0x8030) ||
                (_client->device->chip_id >= 0x8101 && _client->device->chip_id <= 0x8301)) {
@@ -793,14 +793,14 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
         cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
 #if __aarch64__
         retassure(((_client->mode == MODE_RECOVERY) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                  "Device did not reconnect. Possibly invalid iBSS. If you're using a USB-C to Lightning cable, switch to USB-A to Lightning (see issue #67)");
+                  "设备未重新连接，iBEC可能无效。如果您使用的是USB-C转Lightning电缆，请切换到USB-a转Lightning (参考 #67)");
 #else
         retassure(((_client->mode == MODE_RECOVERY) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                  "Device did not reconnect. Possibly invalid iBSS. Reset device and try again");
+                  "设备未重新连接，iBSS可能无效。请重置设备并重试");
 #endif
     } else {
         mutex_unlock(&_client->device_event_mutex);
-        reterror("Device not supported!\n");
+        reterror("该设备不支持！\n");
     }
 
     /* Verify correct nonce/set nonce */
@@ -824,9 +824,9 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
         getDeviceMode(true);
         retassure(((recovery_client_new(_client) == IRECV_E_SUCCESS) ||
                    (mutex_unlock(&_client->device_event_mutex), 0)),
-                  "Failed to connect to device in Recovery Mode!");
+                  "在恢复模式下连接到设备失败！");
         if (get_ap_nonce(_client, &_client->nonce, &_client->nonce_size) < 0) {
-            reterror("Failed to get apnonce from device!");
+            reterror("从设备获取Apnonce失败！");
         }
 
         std::string generator = (_setNonce && _custom_nonce != nullptr) ? _custom_nonce : getGeneratorFromSHSH2(
@@ -835,85 +835,85 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
         if ((_setNonce && _custom_nonce != nullptr) ||
             memcmp(_client->nonce, nonceelem.payload(), _client->nonce_size) != 0) {
             if (!_setNonce)
-                info("ApNonce from device doesn't match IM4M nonce, applying hax...\n");
+                info("设备中的ApNonce与IM4M的nonce不匹配，正在应用hax...\n");
 
             assure(_client->tss);
-            info("Writing generator=%s to nvram!\n", generator.c_str());
+            info("正在将Generator=%s写入nvram！\n", generator.c_str());
 
             retassure(!irecv_setenv(_client->recovery->client, "com.apple.System.boot-nonce", generator.c_str()),
-                      "Failed to write generator to nvram!");
-            retassure(!irecv_saveenv(_client->recovery->client), "Failed to save nvram!");
+                      "将Generator写入nvram失败！");
+            retassure(!irecv_saveenv(_client->recovery->client), "保存nvram失败！");
 
             getDeviceMode(true);
             retassure(((dfu_client_new(_client) == IRECV_E_SUCCESS) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Failed to connect to device in Recovery Mode!");
-            retassure(irecv_usb_set_configuration(_client->dfu->client, 1) >= 0, "ERROR: set configuration failed\n");
+                      "在恢复模式下连接到设备失败！");
+            retassure(irecv_usb_set_configuration(_client->dfu->client, 1) >= 0, "错误：设置配置失败\n");
 
             /* send iBEC */
-            info("Sending %s (%lu bytes)...\n", "iBEC", iBEC.second);
+            info("正在发送 %s (%lu 字节)...\n", "iBEC", iBEC.second);
             mutex_lock(&_client->device_event_mutex);
             err = irecv_send_buffer(_client->dfu->client, (unsigned char *) (char *) iBEC.first,
                                     (unsigned long) iBEC.second, 1);
-            retassure(err == IRECV_E_SUCCESS, "ERROR: Unable to send %s component: %s\n", "iBEC", irecv_strerror(err));
+            retassure(err == IRECV_E_SUCCESS, "错误：无法发送%s组件: %s\n", "iBEC", irecv_strerror(err));
             retassure(((irecv_send_command_breq(_client->dfu->client, "go", 1) == IRECV_E_SUCCESS) ||
                        (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not disconnect/reconnect. Possibly invalid iBEC. Reset device and try again\n");
+                      "设备未断开/重新连接，iBEC可能无效。请重置设备并重试\n");
             irecv_usb_control_transfer(_client->dfu->client, 0x21, 1, 0, 0, nullptr, 0, 5000);
 
-            info("Booting iBEC, waiting for device to disconnect...\n");
+            info("正在启动iBEC，等待设备断开连接...\n");
             cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
             retassure(((_client->mode == MODE_UNKNOWN) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not disconnect. Possibly invalid iBEC. Reset device and try again");
-            info("Booting iBEC, waiting for device to reconnect...\n");
+                      "设备未断开连接，iBEC可能无效。请重置设备并重试");
+            info("正在启动iBEC，等待设备重新连接...\n");
             cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
             retassure(((_client->mode == MODE_RECOVERY) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not reconnect. Possibly invalid iBEC. Reset device and try again");
+                      "设备未重新连接，iBEC可能无效。请重置设备并重试");
             mutex_unlock(&_client->device_event_mutex);
             getDeviceMode(true);
             retassure(((recovery_client_new(_client) == IRECV_E_SUCCESS) ||
                        (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Failed to connect to device in Recovery Mode after ApNonce hax!");
+                      "在ApNonce hax后无法在恢复模式下连接到设备！");
             printf("APnonce post-hax:\n");
             if (get_ap_nonce(_client, &_client->nonce, &_client->nonce_size) < 0) {
-                reterror("Failed to get apnonce from device!");
+                reterror("从设备获取Apnonce失败！");
             }
             assure(!irecv_send_command(_client->recovery->client, "bgcolor 255 255 0"));
             retassure(_setNonce || memcmp(_client->nonce, nonceelem.payload(), _client->nonce_size) == 0,
-                      "ApNonce from device doesn't match IM4M nonce after applying ApNonce hax. Aborting!");
+                      "应用ApNonce hax后，设备中的ApNonce与IM4M的nonce不匹配。正在中止！");
         } else {
             getDeviceMode(true);
             retassure(((dfu_client_new(_client) == IRECV_E_SUCCESS) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Failed to connect to device in Recovery Mode!");
+                      "在恢复模式下连接到设备失败！");
             retassure(irecv_usb_set_configuration(_client->dfu->client, 1) >= 0, "ERROR: set configuration failed\n");
             /* send iBEC */
-            info("Sending %s (%lu bytes)...\n", "iBEC", iBEC.second);
+            info("正在发送 %s (%lu 字节)...\n", "iBEC", iBEC.second);
             mutex_lock(&_client->device_event_mutex);
             err = irecv_send_buffer(_client->dfu->client, (unsigned char *) (char *) iBEC.first,
                                     (unsigned long) iBEC.second, 1);
-            retassure(err == IRECV_E_SUCCESS, "ERROR: Unable to send %s component: %s\n", "iBEC", irecv_strerror(err));
+            retassure(err == IRECV_E_SUCCESS, "错误：无法发送%s组件: %s\n", "iBEC", irecv_strerror(err));
             retassure(((irecv_send_command_breq(_client->dfu->client, "go", 1) == IRECV_E_SUCCESS) ||
                        (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not disconnect/reconnect. Possibly invalid iBEC. Reset device and try again\n");
+                      "设备未断开/重新连接，iBEC可能无效。请重置设备并重试\n");
             irecv_usb_control_transfer(_client->dfu->client, 0x21, 1, 0, 0, nullptr, 0, 5000);
 
-            info("Booting iBEC, waiting for device to disconnect...\n");
+            info("正在启动iBEC，等待设备断开连接...\n");
             cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
             retassure(((MODE_UNKNOWN) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not disconnect. Possibly invalid iBEC. Reset device and try again");
-            info("Booting iBEC, waiting for device to reconnect...\n");
+                      "设备未断开连接，iBEC可能无效。请重置设备并重试");
+            info("正在启动iBEC，等待设备重新连接...\n");
             cond_wait_timeout(&_client->device_event_cond, &_client->device_event_mutex, 10000);
             retassure(((MODE_RECOVERY) || (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Device did not reconnect. Possibly invalid iBEC. Reset device and try again");
+                      "设备未重新连接，iBEC可能无效。请重置设备并重试");
             mutex_unlock(&_client->device_event_mutex);
             getDeviceMode(true);
             retassure(((recovery_client_new(_client) == IRECV_E_SUCCESS) ||
                        (mutex_unlock(&_client->device_event_mutex), 0)),
-                      "Failed to connect to device in Recovery Mode after ApNonce hax!");
+                      "ApNonce hax后，无法在恢复模式下连接到设备！");
             assure(!irecv_send_command(_client->recovery->client, "bgcolor 255 255 0"));
-            info("APNonce from device already matches IM4M nonce, no need for extra hax...\n");
+            info("设备中的APNonce已经与IM4M的nonce匹配，不需要额外的hax...\n");
         }
         retassure(!irecv_setenv(_client->recovery->client, "com.apple.System.boot-nonce", generator.c_str()),
-                  "failed to write generator to nvram");
+                  "将Generator写入nvram失败");
         retassure(!irecv_saveenv(_client->recovery->client), "failed to save nvram");
         uint64_t gen = std::stoull(generator, nullptr, 16);
         auto *nonce = (uint8_t *)alloc.allocate(_client->nonce_size == 32 ? 48 : 20);
@@ -922,19 +922,19 @@ void futurerestore::enterPwnRecovery(plist_t build_identity, std::string bootarg
         } else if (_client->nonce_size == 32) {
             SHA384((unsigned char *) &gen, 8, nonce);
         } else {
-            reterror("Failed to set nonce generator: %s! Unknown nonce size: %d\n", generator.c_str(),
+            reterror("设置nonce Generator失败: %s! 未知nonce大小: %d\n", generator.c_str(),
                      _client->nonce_size);
         }
         for (int i = 0; i < _client->nonce_size; i++) {
             if (*(uint8_t *) (nonce + i) != *(uint8_t *) (_client->nonce + i)) {
-                reterror("Failed to set nonce generator: %s!\n", generator.c_str());
+                reterror("设置nonce Generator失败: %s!\n", generator.c_str());
             }
         }
-        info("Successfully set nonce generator: %s\n", generator.c_str());
+        info("成功设置nonce Generator: %s\n", generator.c_str());
 
         if (_setNonce) {
-            info("Done setting nonce!\n");
-            info("Use futurerestore --exit-recovery to go back to normal mode if you aren't restoring.\n");
+            info("已完成nonce设置！\n");
+            info("如果不进行还原，请使用futurerestore --exit-recovery返回正常模式\n");
             setAutoboot(false);
             recovery_send_reset(_client);
             recovery_client_free(_client);
@@ -960,7 +960,7 @@ void get_custom_component(struct idevicerestore_client_t *client, plist_t build_
         *size = comp.second;
         comp.first = NULL; //don't free on destruction
     } catch (tihmstar::exception &e) {
-        reterror("ERROR: libipatcher failed with reason %d (%s)\n", e.code(), e.what());
+        reterror("错误: libipatcher失败，原因: %d (%s)\n", e.code(), e.what());
     }
 
 #endif
@@ -998,44 +998,44 @@ void futurerestore::doRestore(const char *ipsw) {
     }
     cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, timeout);
 
-    retassure(client->mode != MODE_UNKNOWN, "Unable to discover device mode. Please make sure a device is attached.\n");
+    retassure(client->mode != MODE_UNKNOWN, "无法发现设备模式，请确保已连接设备！\n");
     if (client->mode != MODE_RECOVERY) {
-        retassure(client->mode == MODE_DFU, "Device is in unexpected mode detected!");
-        retassure(_enterPwnRecoveryRequested, "Device is in DFU mode detected, but we were expecting recovery mode!");
+        retassure(client->mode == MODE_DFU, "检测到设备处于意外模式！");
+        retassure(_enterPwnRecoveryRequested, "检测到设备处于意外模式！");
     } else {
-        retassure(!_enterPwnRecoveryRequested, "--use-pwndfu was specified, but device found in recovery mode!");
+        retassure(!_enterPwnRecoveryRequested, "--use-pwndfu已指定，但发现设备处于恢复模式！");
     }
     mutex_unlock(&client->device_event_mutex);
-    info("Found device in %s mode\n", client->mode->string);
+    info("在%s模式下找到设备\n", client->mode->string);
 
-    info("Identified device as %s, %s\n", getDeviceBoardNoCopy(), getDeviceModelNoCopy());
+    info("识别设备为%s, %s\n", getDeviceBoardNoCopy(), getDeviceModelNoCopy());
 
-    retassure(!access(client->ipsw, F_OK), "ERROR: Firmware file %s does not exist.\n",
+    retassure(!access(client->ipsw, F_OK), "错误：固件文件%s不存在\n",
               client->ipsw); // verify if ipsw file exists
 
-    info("Extracting BuildManifest from iPSW\n");
+    info("正在从IPSW中提取BuildManifest\n");
     {
         int unused;
         retassure(!ipsw_extract_build_manifest(client->ipsw, &buildmanifest, &unused),
-                  "ERROR: Unable to extract BuildManifest from %s. Firmware file might be corrupt.\n", client->ipsw);
+                  "错误：无法从%s中提取BuildManifest，固件文件可能已损坏\n", client->ipsw);
     }
     client->build_manifest = plist_copy(buildmanifest);
 
     /* check if device type is supported by the given build manifest */
     retassure(!build_manifest_check_compatibility(buildmanifest, client->device->product_type),
-              "ERROR: Could not make sure this firmware is suitable for the current device. Refusing to continue.\n");
+              "错误：无法确保此固件适用于当前设备，拒绝继续执行\n");
 
     /* print iOS information from the manifest */
     build_manifest_get_version_information(buildmanifest, client);
-    info("Product version: %s\n", client->version);
-    info("Product build: %s Major: %d\n", client->build, client->build_major);
+    info("Product版本: %s\n", client->version);
+    info("Product构建版本: %s Major: %d\n", client->build, client->build_major);
     client->image4supported = is_image4_supported(client);
-    info("Device supports Image4: %s\n", (client->image4supported) ? "true" : "false");
+    info("设备是否支持Image4: %s\n", (client->image4supported) ? "true" : "false");
 
     if (_enterPwnRecoveryRequested) //we are in pwnDFU, so we don't need to check nonces
         client->tss = _aptickets.at(0);
     else if (!(client->tss = nonceMatchesApTickets()) && !this->_isPwnDfu)
-        reterror("Device ApNonce does not match APTicket nonce\n");
+        reterror("设备ApNonce与APTicket的nonce不匹配\n");
 
     plist_dict_remove_item(client->tss, "BBTicket");
     plist_dict_remove_item(client->tss, "BasebandFirmware");
@@ -1043,30 +1043,30 @@ void futurerestore::doRestore(const char *ipsw) {
 
     if (_enterPwnRecoveryRequested && _client->image4supported) {
         retassure(plist_dict_get_item(_client->tss, "generator"),
-                  "signing ticket file does not contain generator. But a generator is required for 64-bit pwnDFU restore");
+                  "签名Ticket文件不包含Generator，但是64位pwnDFU还原需要");
     }
 
     retassure(build_identity = getBuildidentityWithBoardconfig(buildmanifest, client->device->hardware_model,
                                                                _isUpdateInstall),
-              "ERROR: Unable to find any build identities for iPSW\n");
+              "错误：找不到IPSW的任何构建标识\n");
 
     if (_client->image4supported && !_setNonce) {
         if (!(client->sepBuildIdentity = getBuildidentityWithBoardconfig(_sepbuildmanifest,
                                                                          client->device->hardware_model,
                                                                          _isUpdateInstall))) {
-            retassure(_isPwnDfu, "ERROR: Unable to find any build identities for SEP\n");
-            warning("can't find buildidentity for SEP with InstallType=%s. However pwnDFU was requested, so trying fallback to %s",
+            retassure(_isPwnDfu, "错误：找不到SEP的任何构建标识\n");
+            warning("找不到InstallType=%s的SEP的构建标识，但是请求了pwnDFU，因此正在尝试回退到%s",
                     (_isUpdateInstall ? "UPDATE" : "ERASE"), (!_isUpdateInstall ? "UPDATE" : "ERASE"));
             retassure((client->sepBuildIdentity = getBuildidentityWithBoardconfig(_sepbuildmanifest,
                                                                                   client->device->hardware_model,
                                                                                   !_isUpdateInstall)),
-                      "ERROR: Unable to find any build identities for SEP\n");
+                      "错误：找不到SEP的任何构建标识\n");
         }
     }
 
     plist_t manifest = plist_dict_get_item(build_identity, "Manifest"); //this is the buildidentity used for restore
 
-    printf("checking if the APTicket is valid for this restore...\n"); //if we are in pwnDFU, just use first APTicket. We don't need to check nonces.
+    printf("正在检查APTicket是否对此还原有效...\n"); //if we are in pwnDFU, just use first APTicket. We don't need to check nonces.
     auto im4m = (_enterPwnRecoveryRequested || _rerestoreiOS9) ? _im4ms.at(0) : nonceMatchesIM4Ms();
 
     uint64_t deviceEcid = getDeviceEcid();
@@ -1078,32 +1078,32 @@ void futurerestore::doRestore(const char *ipsw) {
         im4mEcid = getEcidFromSCAB(im4m.first, im4m.second);
     }
 
-    retassure(im4mEcid, "Failed to read ECID from APTicket\n");
+    retassure(im4mEcid, "从APTicket读取ECID失败\n");
 
     if (im4mEcid != deviceEcid) {
-        error("ECID inside of the APTicket does not match the device's ECID\n");
-        printf("APTicket is valid for %16llu (dec) but device is %16llu (dec)\n", im4mEcid, deviceEcid);
+        error("APTicket内的ECID与设备的ECID不匹配\n");
+        printf("APTicket对%16llu (dec)有效，但设备为%16llu (dec)\n", im4mEcid, deviceEcid);
         if (_skipBlob) {
-            info("[WARNING] NOT VALIDATING SHSH BLOBS ECID!\n");
+            info("[警告] 未验证SHSH Blobs ECID!\n");
         } else {
-            reterror("APTicket can't be used for restoring this device\n");
+            reterror("APTicket无法用于还原此设备\n");
         }
     } else
-        printf("Verified ECID in APTicket matches the device's ECID\n");
+        printf("APTicket中验证的ECID与设备的ECID匹配\n");
 
     if (_client->image4supported) {
-        printf("checking if the APTicket is valid for this restore...\n");
+        printf("正在检查APTicket是否对此还原有效...\n");
 
         if (im4mEcid != deviceEcid) {
-            error("ECID inside of the APTicket does not match the device's ECID\n");
-            printf("APTicket is valid for %16llu (dec) but device is %16llu (dec)\n", im4mEcid, deviceEcid);
+            error("APTicket内的ECID与设备的ECID不匹配\n");
+            printf("APTicket对%16llu (dec)有效，但设备为%16llu (dec)\n", im4mEcid, deviceEcid);
             if (_skipBlob) {
-                info("[WARNING] NOT VALIDATING SHSH BLOBS ECID!\n");
+                info("[警告] 未验证SHSH Blobs ECID!\n");
             } else {
-                reterror("APTicket can't be used for restoring this device\n");
+                reterror("APTicket无法用于还原此设备\n");
             }
         } else
-            printf("Verified ECID in APTicket matches the device's ECID\n");
+            printf("APTicket中验证的ECID与设备的ECID匹配\n");
 
         plist_t ticketIdentity = nullptr;
 
@@ -1111,13 +1111,13 @@ void futurerestore::doRestore(const char *ipsw) {
             ticketIdentity = img4tool::getBuildIdentityForIm4m({im4m.first, im4m.second}, buildmanifest);
         } catch (tihmstar::exception &e) {
             if (_skipBlob) {
-                info("[WARNING] NOT VALIDATING SHSH BLOBS IM4M!\n");
+                info("[警告] 未验证SHSH Blobs IM4M!\n");
             }
             //
         }
 
         if (!_skipBlob && !ticketIdentity) {
-            printf("Failed to get exact match for build identity, using fallback to ignore certain values\n");
+            printf("无法获得完全匹配的构建标识，正在回退并忽略某些值\n");
             ticketIdentity = img4tool::getBuildIdentityForIm4m({im4m.first, im4m.second}, buildmanifest,
                                                                {"RestoreRamDisk", "RestoreTrustCache"});
         }
@@ -1125,32 +1125,32 @@ void futurerestore::doRestore(const char *ipsw) {
         /* TODO: make this nicer!
            for now a simple pointercompare should be fine, because both plist_t should point into the same buildidentity inside the buildmanifest */
         if (ticketIdentity != build_identity) {
-            error("BuildIdentity selected for restore does not match APTicket\n\n");
-            info("BuildIdentity selected for restore:\n");
+            error("为还原选择的BuildIdentity与APTicket不匹配\n\n");
+            info("已选择BuildIdentity进行还原:\n");
             img4tool::printGeneralBuildIdentityInformation(build_identity);
-            info("\nBuildIdentity is valid for the APTicket:\n");
+            info("\nBuildIdentity对APTicket有效:\n");
 
             if (ticketIdentity) img4tool::printGeneralBuildIdentityInformation(ticketIdentity), putchar('\n');
             else {
-                info("IM4M is not valid for any restore within the Buildmanifest\n");
-                info("This APTicket can't be used for restoring this firmware\n");
+                info("IM4M对Buildmanifest中的任何还原都无效\n");
+                info("此APTicket不能用于还原此固件\n");
             }
             if (_skipBlob) {
-                info("[WARNING] NOT VALIDATING SHSH BLOBS!\n");
+                info("[警告] 未验证SHSH Blobs!\n");
             } else {
-                reterror("APTicket can't be used for this restore\n");
+                reterror("APTicket不能用于此还原\n");
             }
         } else {
             if (!img4tool::isIM4MSignatureValid({im4m.first, im4m.second})) {
-                info("IM4M signature is not valid!\n");
+                info("IM4M签名无效！\n");
             }
-            info("Verified APTicket to be valid for this restore\n");
+            info("已验证的APTicket对此还原有效\n");
         }
     } else if (_enterPwnRecoveryRequested) {
-        info("[WARNING] skipping ramdisk hash check, since device is in pwnDFU according to user\n");
+        info("[警告] 正在跳过ramdisk哈希检查，因为设备根据用户处于pwnDFU模式中\n");
 
     } else {
-        info("[WARNING] full buildidentity check is not implemented, only comparing ramdisk hash.\n");
+        info("[警告] 未执行完整的构建标识检查，仅比较了ramdisk哈希值\n");
 
         auto ticket = getRamdiskHashFromSCAB(im4m.first, im4m.second);
         const char *tickethash = ticket.first;
@@ -1165,12 +1165,12 @@ void futurerestore::doRestore(const char *ipsw) {
         plist_get_data_val(digest, &manifestDigest, &manifestDigestSize);
 
         if (tickethashSize == manifestDigestSize && memcmp(tickethash, manifestDigest, tickethashSize) == 0) {
-            info("Verified APTicket to be valid for this restore\n");
+            info("已验证的APTicket对此还原有效\n");
             free(manifestDigest);
         } else {
             free(manifestDigest);
-            printf("APTicket ramdisk hash does not match the ramdisk we are trying to boot. Are you using correct install type (Update/Erase)?\n");
-            reterror("APTicket can't be used for this restore\n");
+            printf("APTicket的ramdisk哈希与我们尝试启动的ramdisk不匹配，您是否使用了正确的安装类型 (更新/抹除)?\n");
+            reterror("APTicket不能用于此还原\n");
         }
     }
 
@@ -1181,8 +1181,8 @@ void futurerestore::doRestore(const char *ipsw) {
             retassure(client->basebandBuildIdentity = getBuildidentityWithBoardconfig(_basebandbuildmanifest,
                                                                                       client->device->hardware_model,
                                                                                       !_isUpdateInstall),
-                      "ERROR: Unable to find any build identities for Baseband\n");
-            info("[WARNING] Unable to find Baseband buildidentities for restore type %s, using fallback %s\n",
+                      "错误：找不到基带的任何构建标识\n");
+            info("[警告] 无法找到恢复类型%s的基带构建标识，正在使用回退%s\n",
                  (_isUpdateInstall) ? "Update" : "Erase", (!_isUpdateInstall) ? "Update" : "Erase");
         }
 
@@ -1192,9 +1192,9 @@ void futurerestore::doRestore(const char *ipsw) {
         plist_t bb_baseband = plist_copy(plist_dict_get_item(bb_manifest, "BasebandFirmware"));
         plist_dict_set_item(manifest, "BasebandFirmware", bb_baseband);
 
-        retassure(_client->basebandBuildIdentity, "BasebandBuildIdentity not loaded, refusing to continue");
+        retassure(_client->basebandBuildIdentity, "基带BuildIdentity未加载，拒绝继续执行");
     } else {
-        warning("WARNING: we don't have a BasebandBuildManifest, won't flash baseband!\n");
+        warning("警告: 我们没有基带BuildManifest，将不会刷新基带！\n");
     }
 
     if (_client->image4supported && !_setNonce) {
@@ -1207,7 +1207,7 @@ void futurerestore::doRestore(const char *ipsw) {
         uint64_t sephashlen = 20;
         plist_t digest = plist_dict_get_item(sep_sep, "Digest");
 
-        retassure(digest && plist_get_node_type(digest) == PLIST_DATA, "ERROR: can't find SEP digest\n");
+        retassure(digest && plist_get_node_type(digest) == PLIST_DATA, "错误: 找不到SEP摘要\n");
 
         plist_get_data_val(digest, reinterpret_cast<char **>(&sephash), &sephashlen);
         if (sephashlen == 20) {
@@ -1216,7 +1216,7 @@ void futurerestore::doRestore(const char *ipsw) {
         else {
             SHA384((const unsigned char *) _client->sepfwdata, (uint64_t) _client->sepfwdatasize, genHash);
         }
-        retassure(!memcmp(genHash, sephash, sephashlen), "ERROR: SEP does not match sepmanifest\n");
+        retassure(!memcmp(genHash, sephash, sephashlen), "错误: SEP与sepmanifest不匹配\n");
     }
 
     build_identity_print_information(build_identity); // print information about current build identity
@@ -1260,7 +1260,7 @@ void futurerestore::doRestore(const char *ipsw) {
     // Get filesystem name from build identity
     char *fsname = nullptr;
     retassure(!build_identity_get_component_path(build_identity, "OS", &fsname),
-              "ERROR: Unable to get path for filesystem component\n");
+              "错误: 无法获取filesystem组件的路径\n");
 
     // check if we already have an extracted filesystem
 #ifdef WIN32
@@ -1335,7 +1335,7 @@ void futurerestore::doRestore(const char *ipsw) {
             // use temp filename
             filesystem = reinterpret_cast<char *>(mkstemp(const_cast<char *>("ipsw_")));
             if (!filesystem) {
-                error("WARNING: Could not get temporary filename, using '%s' in current directory\n", fsname);
+                error("警告: 无法获取临时文件名，正在在当前目录中使用'%s'\n", fsname);
                 filesystem = strdup(fsname);
             }
             delete_fs = 1;
@@ -1346,9 +1346,9 @@ void futurerestore::doRestore(const char *ipsw) {
         }
         remove(lockfn);
 
-        info("Extracting filesystem from iPSW\n");
+        info("正在从IPSW中提取filesystem\n");
         retassure(!ipsw_extract_to_file_with_progress(client->ipsw, fsname, filesystem, 1),
-                  "ERROR: Unable to extract filesystem from iPSW\n");
+                  "错误: 无法从IPSW提取filesystem\n");
 
         // rename <fsname>.extract to <fsname>
         if (strstr(filesystem, ".extract")) {
@@ -1364,23 +1364,23 @@ void futurerestore::doRestore(const char *ipsw) {
         if (dfu_send_component(client, build_identity, "iBSS") < 0) {
             irecv_close(client->dfu->client);
             client->dfu->client = nullptr;
-            reterror("ERROR: Unable to send iBSS to device\n");
+            reterror("错误: 无法将iBSS发送到设备\n");
         }
 
         /* reconnect */
         dfu_client_free(client);
 
-        info("Booting iBSS, Waiting for device to disconnect...\n");
+        info("正在启动iBSS，等待设备断开连接...\n");
         cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
         retassure((client->mode == MODE_UNKNOWN || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBSS. Reset device and try again");
+                  "设备未断开连接，iBSS可能无效。请重置设备并重试");
         mutex_unlock(&client->device_event_mutex);
 
-        info("Booting iBSS, Waiting for device to reconnect...\n");
+        info("正在启动iBSS，等待设备重新连接...\n");
         mutex_lock(&_client->device_event_mutex);
         cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
         retassure((client->mode == MODE_DFU || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBSS. Reset device and try again");
+                  "设备未断开连接，iBSS可能无效。请重置设备并重试");
         mutex_unlock(&client->device_event_mutex);
 
         dfu_client_new(client);
@@ -1389,23 +1389,23 @@ void futurerestore::doRestore(const char *ipsw) {
         if (dfu_send_component(client, build_identity, "iBEC") < 0) {
             irecv_close(client->dfu->client);
             client->dfu->client = nullptr;
-            reterror("ERROR: Unable to send iBEC to device\n");
+            reterror("错误: 无法将iBEC发送到设备\n");
         }
 
         dfu_client_free(client);
 
-        info("Booting iBEC, Waiting for device to disconnect...\n");
+        info("正在启动iBEC，等待设备断开连接...\n");
         mutex_lock(&_client->device_event_mutex);
         cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
         retassure((client->mode == MODE_UNKNOWN || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBEC. Reset device and try again");
+                  "设备未断开连接，iBEC可能无效。请重置设备并重试");
         mutex_unlock(&client->device_event_mutex);
 
-        info("Booting iBEC, Waiting for device to reconnect...\n");
+        info("正在启动iBEC，等待设备重新连接...\n");
         mutex_lock(&_client->device_event_mutex);
         cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
         retassure((client->mode == MODE_RECOVERY || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not reconnect. Possibly invalid iBEC. Reset device and try again");
+                  "设备未重新连接，iBEC可能无效。请重置设备并重试");
         mutex_unlock(&client->device_event_mutex);
 
     } else {
@@ -1413,7 +1413,7 @@ void futurerestore::doRestore(const char *ipsw) {
             if (!client->image4supported) {
                 /* send APTicket */
                 if (recovery_send_ticket(client) < 0) {
-                    error("WARNING: Unable to send APTicket\n");
+                    error("警告: 无法发送APTicket\n");
                 }
             }
         }
@@ -1428,75 +1428,75 @@ void futurerestore::doRestore(const char *ipsw) {
     } else if (!_rerestoreiOS9) {
 
         /* now we load the iBEC */
-        retassure(!recovery_send_ibec(client, build_identity), "ERROR: Unable to send iBEC\n");
+        retassure(!recovery_send_ibec(client, build_identity), "错误: 无法发送iBEC\n");
 
-        debug("waiting for device to reconnect...\n");
+        debug("正在等待设备重新连接...\n");
         recovery_client_free(client);
 
-        debug("Waiting for device to disconnect...\n");
+        debug("正在等待设备断开连接...\n");
         mutex_unlock(&client->device_event_mutex);
         cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
 #if __aarch64__
         retassure((client->mode == MODE_UNKNOWN || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBEC. If you're using a USB-C to Lightning cable, switch to USB-A to Lightning (see issue #67)");
+                  "设备未断开连接，iBEC可能无效。如果您使用的是USB-C转Lightning电缆，请切换到USB-a转Lightning (参考 #67)");
 #else
         retassure((client->mode == MODE_UNKNOWN || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBEC. Reset device and try again");  
+                  "设备未断开连接，iBEC可能无效。请重置设备并重试");  
 #endif  
         mutex_unlock(&client->device_event_mutex);
 
-        debug("Waiting for device to reconnect...\n");
+        debug("正在等待设备重新连接...\n");
         mutex_unlock(&client->device_event_mutex);
         cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
 #if __aarch64__
         retassure((client->mode == MODE_RECOVERY || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBEC. If you're using a USB-C to Lightning cable, switch to USB-A to Lightning (see issue #67)");
+                  "设备未断开连接，iBEC可能无效。如果您使用的是USB-C转Lightning电缆，请切换到USB-a转Lightning (参考 #67)");
 #else
         retassure((client->mode == MODE_RECOVERY || (mutex_unlock(&client->device_event_mutex), 0)),
-                  "Device did not disconnect. Possibly invalid iBEC. Reset device and try again");    
+                  "设备未断开连接，iBEC可能无效。请重置设备并重试");    
 #endif    
         mutex_unlock(&client->device_event_mutex);
     }
 
-    retassure(client->mode == MODE_RECOVERY, "failed to reconnect to device in recovery (iBEC) mode\n");
+    retassure(client->mode == MODE_RECOVERY, "无法在恢复(iBEC)模式下重新连接到设备\n");
 
     //do magic
     if (_client->image4supported) get_sep_nonce(client, &client->sepnonce, &client->sepnonce_size);
     get_ap_nonce(client, &client->nonce, &client->nonce_size);
 
     if (client->mode == MODE_RECOVERY) {
-        retassure(client->srnm, "ERROR: Could not retrieve device serial number. Can't continue.\n");
+        retassure(client->srnm, "错误: 无法检索设备序列号，无法继续执行\n");
 
         if (client->device->chip_id < 0x8015) {
             retassure(!irecv_send_command(client->recovery->client, "bgcolor 0 255 0"),
-                      "ERROR: Unable to set bgcolor\n");
-            info("[WARNING] Setting bgcolor to green! If you don't see a green screen, then your device didn't boot iBEC correctly\n");
+                      "错误：无法设置背景颜色\n");
+            info("[警告] 正在将背景设置为绿色！如果你没有看到绿色界面，那么你的设备没有正确启动iBEC\n");
             sleep(2); //show the user a green screen!
         }
 
-        retassure(!recovery_enter_restore(client, build_identity), "ERROR: Unable to place device into restore mode\n");
+        retassure(!recovery_enter_restore(client, build_identity), "错误: 无法将设备置于还原模式\n");
 
         recovery_client_free(client);
     }
 
     if (_client->image4supported && !_setNonce) {
-        info("getting SEP ticket\n");
+        info("正在获取SEP Ticket\n");
         retassure(!get_tss_response(client, client->sepBuildIdentity, &client->septss),
-                  "ERROR: Unable to get signing tickets for SEP\n");
+                  "错误: 无法获取SEP的签名Tickets\n");
         retassure(_client->sepfwdatasize && _client->sepfwdata, "SEP is not loaded, refusing to continue");
     }
 
     mutex_lock(&client->device_event_mutex);
-    debug("Waiting for device to enter restore mode...\n");
+    debug("正在等待设备进入还原模式...\n");
     cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 180000);
     retassure((client->mode == MODE_RESTORE || (mutex_unlock(&client->device_event_mutex), 0)),
-              "Unable to place device into restore mode");
+              "无法将设备置于还原模式");
     mutex_unlock(&client->device_event_mutex);
 
-    info("About to restore device... \n");
+    info("即将还原设备... \n");
     int result = restore_device(client, build_identity, filesystem);
     if (result == 2) return;
-    else retassure(!(result), "ERROR: Unable to restore device\n");
+    else retassure(!(result), "错误: 无法还原设备\n");
 }
 
 #ifdef __APPLE__
@@ -1601,7 +1601,7 @@ int futurerestore::findProc(const char *procName, bool load) {
 
 void futurerestore::daemonManager(bool load) {
     if(!load) {
-        debug("daemonManager: suspending invasive macOS daemons...\n");
+        debug("daemonManager: 正在暂停入侵的MacOS守护进程...\n");
     }
     int pid = 0;
     const char *procList[] = { "Spotify", "MobileDeviceUpdater", "AMPDevicesAgent", "AMPDeviceDiscoveryAgent", nullptr};
@@ -1611,14 +1611,14 @@ void futurerestore::daemonManager(bool load) {
             if (load) {
                 int ret = kill(pid, SIGCONT);
             } else {
-                debug("daemonManager: killing %s.\n", procList[i]);
+                debug("daemonManager: 正在结束%s\n", procList[i]);
                 int ret = kill(pid, SIGSTOP);
             }
         }
     }
 
     if(!load) {
-        debug("daemonManager: done!\n");
+        debug("daemonManager: 完成！\n");
     }
 }
 #endif
@@ -1651,30 +1651,30 @@ futurerestore::~futurerestore() {
 void futurerestore::loadFirmwareTokens() {
     if (!_firmwareTokens) {
         if (!_firmwareJson) _firmwareJson = getFirmwareJson();
-        retassure(_firmwareJson, "[TSSC] Could not get firmware.json\n");
+        retassure(_firmwareJson, "[TSSC] 无法获取firmware.json\n");
         long cnt = parseTokens(_firmwareJson, &_firmwareTokens);
-        retassure(cnt > 0, "[TSSC] parsing %s.json failed\n", (0) ? "ota" : "firmware");
+        retassure(cnt > 0, "[TSSC] 解析%s.json失败\n", (0) ? "ota" : "firmware");
     }
     if(!_betaFirmwareTokens && _useCustomLatestBeta) {
         if (!_betaFirmwareJson) _betaFirmwareJson = getBetaFirmwareJson(getDeviceModelNoCopy());
         if(!_betaFirmwareJson || strcmp(_betaFirmwareJson, "[]") == 0) {
-            info("[TSSC] Could not get betas json, falling back to appledb\n");
+            info("[TSSC] 无法获取betas json，正在回退到Appledb\n");
             _useAppleDB = true;
             std::string type("iOS");
             if(std::string(getDeviceModelNoCopy()).find("iPad") != std::string::npos) {
                 type = std::string("iPadOS");
             }
             _betaFirmwareJson = getBetaFirmwareJson2(type.c_str(), _customLatestBuildID.c_str());
-            retassure(_betaFirmwareJson, "[TSSC] Could not get betas json\n");
+            retassure(_betaFirmwareJson, "[TSSC] 无法获取betas json\n");
         }
         long cnt = parseTokens(_betaFirmwareJson, &_betaFirmwareTokens);
-        retassure(cnt > 0, "[TSSC] parsing %s.json failed\n", (0) ? "beta ota" : "beta firmware");
+        retassure(cnt > 0, "[TSSC] 解析%s.json失败\n", (0) ? "beta ota" : "beta firmware");
     }
     if(!_otaFirmwareTokens && _useCustomLatestOTA) {
         if (!_otaFirmwareJson) _otaFirmwareJson = getOtaJson();
-        retassure(_otaFirmwareJson, "[TSSC] Could not get otas json\n");
+        retassure(_otaFirmwareJson, "[TSSC] 无法获取otas json\n");
         long cnt = parseTokens(_otaFirmwareJson, &_otaFirmwareTokens);
-        retassure(cnt > 0, "[TSSC] parsing %s.json failed\n", (0) ? "beta ota" : "beta firmware");
+        retassure(cnt > 0, "[TSSC] 解析%s.json失败\n", (0) ? "beta ota" : "beta firmware");
     }
 }
 
@@ -1762,7 +1762,7 @@ char *futurerestore::getLatestManifest() {
         while ((bpos = strstr((char *) (versVals.version = strdup(versions[i++])), "[B]")) != nullptr) {
             free((char *) versVals.version);
             if (--versionCnt == 0)
-                reterror("[TSSC] automatic selection of firmware Couldn't find for non-beta versions\n");
+                reterror("[TSSC] 自动选择固件找不到非beta版本\n");
         }
         if(_useCustomLatest) {
             i = 0;
@@ -1777,7 +1777,7 @@ char *futurerestore::getLatestManifest() {
                 }
             }
             if(i != -1) {
-                reterror("[TSSC] failed to find custom version for device!\n");
+                reterror("[TSSC] 找不到设备的自定义版本！\n");
             }
         } else if(!_useCustomLatestBeta && _useCustomLatestBuildID) {
             i = 0;
@@ -1792,14 +1792,14 @@ char *futurerestore::getLatestManifest() {
                 }
             }
             if(i != -1) {
-                reterror("[TSSC] failed to find custom buildid for device!\n");
+                reterror("[TSSC] 找不到设备的自定义build id！\n");
             }
         }
         if(!_useCustomLatestBeta) {
             if(_useCustomLatestBuildID) {
-                debug("[TSSC] selecting latest firmware version: %s\n", versVals.buildID);
+                debug("[TSSC] 正在选择最新固件版本: %s\n", versVals.buildID);
             } else {
-                debug("[TSSC] selecting latest firmware version: %s\n", versVals.version);
+                debug("[TSSC] 正在选择最新固件版本: %s\n", versVals.version);
             }
         }
         if (bpos) *bpos = '\0';
@@ -1811,7 +1811,7 @@ char *futurerestore::getLatestManifest() {
                 versVals.buildID); //make sure it gets freed after function finishes execution by either reaching end or throwing exception
 
         if(_useCustomLatestBeta) {
-            debug("[TSSC] selecting latest firmware version: %s\n", _customLatestBuildID.c_str());
+            debug("[TSSC] 正在选择最新固件版本: %s\n", _customLatestBuildID.c_str());
             if(_useCustomLatestOTA) {
                 t_versionURL *urls = getFirmwareUrls(device, &versVals, _otaFirmwareTokens, _useCustomLatestBeta, _useCustomLatestOTA);
                 while(urls && urls++->url) {
@@ -1870,8 +1870,8 @@ char *futurerestore::getLatestManifest() {
             _latestManifest = getBuildManifest(_latestFirmwareUrl, device, nullptr, versVals.buildID,
                                                _useCustomLatestOTA);
         }
-        retassure(_latestFirmwareUrl, "Could not find url of latest firmware version\n");
-        retassure(_latestManifest, "Could not get buildmanifest of latest firmware version\n");
+        retassure(_latestFirmwareUrl, "找不到最新固件版本的链接\n");
+        retassure(_latestManifest, "无法获取最新固件版本的buildmanifest\n");
     }
 
     return _latestManifest;
@@ -1899,13 +1899,13 @@ void futurerestore::downloadLatestRose() {
         auto *digestString = getDigestOfElementInManifest("Rap,RTKitOS", manifeststr, getDeviceBoardNoCopy(), 0);
         unsigned char *hash = getSHA(roseTempPath, ((_client->device->chip_id < 0x8010) ? 3 : 0));
         if(hash && digestString && !memcmp(digestString, hash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-            info("Using cached Rose\n");
+            info("正在使用已缓存的Rose\n");
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Rose firmware\n\n");
+            info("正在下载Rose固件\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), roseStr, roseTempPath.c_str()),
-                      "Could not download Rose\n");
+                      "无法下载Rose\n");
         }
         loadRose(roseTempPath);
     }
@@ -1922,9 +1922,9 @@ void futurerestore::downloadLatestSE() {
             seStr = reinterpret_cast<char *>(&otaString);
         }
         // TODO: SE caching how does ProductionUpdatePayloadHash work?
-        info("Downloading SE firmware\n\n");
+        info("正在下载SE固件\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), seStr, seTempPath.c_str()),
-                  "Could not download SE\n");
+                  "无法下载SE\n");
         loadSE(seTempPath);
     }
 }
@@ -1966,9 +1966,9 @@ void futurerestore::downloadLatestSavage() {
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Savage,B0-Prod-Patch\n\n");
+            info("正在下载Savage,B0-Prod-Patch\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), savageB0ProdStr, savagePaths[0].c_str()),
-                      "Could not download Savage,B0-Prod-Patch\n");
+                      "无法下载Savage,B0-Prod-Patch\n");
         }
     }
     memset(otaString, 0, 1024);
@@ -1985,9 +1985,9 @@ void futurerestore::downloadLatestSavage() {
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Savage,B0-Dev-Patch\n\n");
+            info("正在下载Savage,B0-Dev-Patch\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), savageB0DevStr, savagePaths[1].c_str()),
-                      "Could not download Savage,B0-Dev-Patch\n");
+                      "无法下载Savage,B0-Dev-Patch\n");
         }
     }
     memset(otaString, 0, 1024);
@@ -2000,13 +2000,13 @@ void futurerestore::downloadLatestSavage() {
         auto *digestString = getDigestOfElementInManifest("Savage,B2-Prod-Patch", manifeststr, getDeviceBoardNoCopy(), 0);
         unsigned char *hash = getSHA(savagePaths[2], 1);
         if(hash && digestString && !memcmp(digestString, hash, 32)) {
-            info("Using cached Savage,B2-Prod-Patch.\n");
+            info("正在使用已缓存的Savage,B2-Prod-Patch.\n");
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Savage,B2-Prod-Patch\n\n");
+            info("正在下载Savage,B2-Prod-Patch\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), savageB2ProdStr, savagePaths[2].c_str()),
-                      "Could not download Savage,B2-Prod-Patch\n");
+                      "无法下载Savage,B2-Prod-Patch\n");
         }
     }
     memset(otaString, 0, 1024);
@@ -2019,13 +2019,13 @@ void futurerestore::downloadLatestSavage() {
         auto *digestString = getDigestOfElementInManifest("Savage,B2-Dev-Patch", manifeststr, getDeviceBoardNoCopy(), 0);
         unsigned char *hash = getSHA(savagePaths[3], 1);
         if(hash && digestString && !memcmp(digestString, hash, 32)) {
-            info("Using cached Savage,B2-Dev-Patch.\n");
+            info("正在使用已缓存的Savage,B2-Dev-Patch.\n");
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Savage,B2-Dev-Patch\n\n");
+            info("正在下载Savage,B2-Dev-Patch\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), savageB2DevStr, savagePaths[3].c_str()),
-                      "Could not download Savage,B2-Dev-Patch\n");
+                      "无法下载Savage,B2-Dev-Patch\n");
         }
     }
     memset(otaString, 0, 1024);
@@ -2038,13 +2038,13 @@ void futurerestore::downloadLatestSavage() {
         auto *digestString = getDigestOfElementInManifest("Savage,BA-Prod-Patch", manifeststr, getDeviceBoardNoCopy(), 0);
         unsigned char *hash = getSHA(savagePaths[4], 1);
         if(hash && digestString && !memcmp(digestString, hash, 32)) {
-            info("Using cached Savage,BA-Prod-Patch.\n");
+            info("正在使用已缓存的Savage,BA-Prod-Patch.\n");
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Savage,BA-Prod-Patch\n\n");
+            info("正在下载Savage,BA-Prod-Patch\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), savageBAProdStr, savagePaths[4].c_str()),
-                      "Could not download Savage,BA-Prod-Patch\n");
+                      "无法下载Savage,BA-Prod-Patch\n");
         }
     }
     memset(otaString, 0, 1024);
@@ -2057,13 +2057,13 @@ void futurerestore::downloadLatestSavage() {
         auto *digestString = getDigestOfElementInManifest("Savage,BA-Dev-Patch", manifeststr, getDeviceBoardNoCopy(), 0);
         unsigned char *hash = getSHA(savagePaths[5], 1);
         if(hash && digestString && !memcmp(digestString, hash, 32)) {
-            info("Using cached Savage,BA-Dev-Patch.\n");
+            info("正在使用已缓存的Savage,BA-Dev-Patch.\n");
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Savage,BA-Dev-Patch\n\n");
+            info("正在下载Savage,BA-Dev-Patch\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), savageBADevStr, savagePaths[5].c_str()),
-                      "Could not download Savage,BA-Dev-Patch\n");
+                      "无法下载Savage,BA-Dev-Patch\n");
         }
     }
     if (savageB0ProdStr &&
@@ -2093,13 +2093,13 @@ void futurerestore::downloadLatestVeridian() {
         auto *digestString = getDigestOfElementInManifest("BMU,DigestMap", manifeststr, getDeviceBoardNoCopy(), 0);
         unsigned char *hash = getSHA(veridianDGMTempPath, ((_client->device->chip_id < 0x8010) ? 3 : 0));
         if(hash && digestString && !memcmp(digestString, hash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-            info("Using cached BMU,DigestMap(Veridian).\n");
+            info("正在使用已缓存的BMU,DigestMap(Veridian).\n");
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Veridian DigestMap\n\n");
+            info("正在下载Veridian DigestMap\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), veridianDGMStr, veridianDGMTempPath.c_str()),
-                      "Could not download Veridian DigestMap\n");
+                      "无法下载Veridian DigestMap\n");
         }
     }
     memset(otaString, 0, 1024);
@@ -2111,13 +2111,13 @@ void futurerestore::downloadLatestVeridian() {
         auto digestString = getDigestOfElementInManifest("BMU,FirmwareMap", manifeststr, getDeviceBoardNoCopy(), 0);
         auto hash = getSHA(veridianFWMTempPath, ((_client->device->chip_id < 0x8010) ? 3 : 0));
         if(hash && digestString && !memcmp(digestString, hash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-            info("Using cached BMU,FirmwareMap(Veridian).\n");
+            info("正在使用已缓存的BMU,FirmwareMap(Veridian).\n");
             safeFree(digestString);
             safeFree(hash);
         } else {
-            info("Downloading Veridian FirmwareMap\n\n");
+            info("正在下载Veridian FirmwareMap\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), veridianFWMStr, veridianFWMTempPath.c_str()),
-                      "Could not download Veridian FirmwareMap\n");
+                      "无法下载Veridian FirmwareMap\n");
         }
     }
     if (veridianDGMStr && veridianFWMStr)
@@ -2134,9 +2134,9 @@ void futurerestore::downloadLatestTimer() {
             snprintf(otaString, 1024, "%s%s", "AssetData/boot/", timerStr);
             timerStr = reinterpret_cast<char *>(&otaString);
         }
-        info("Downloading Timer firmware\n\n");
+        info("正在下载Timer固件\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), timerStr, timerTempPath.c_str()),
-                  "Could not download Timer\n");
+                  "无法下载Timer\n");
         loadTimer(timerTempPath);
     }
 }
@@ -2151,9 +2151,9 @@ void futurerestore::downloadLatestBaobab() {
             snprintf(otaString, 1024, "%s%s", "AssetData/boot/", baobabStr);
             baobabStr = reinterpret_cast<char *>(&otaString);
         }
-        info("Downloading Baobab firmware\n\n");
+        info("正在下载Baobab固件\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), baobabStr, baobabTempPath.c_str()),
-                  "Could not download Baobab\n");
+                  "无法下载Baobab\n");
         loadBaobab(baobabTempPath);
     }
 }
@@ -2218,9 +2218,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers0Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[0] = futurerestoreTempPath + "/yonkers0.fw";
-            info("Downloading Yonkers,SysTopPatch0\n\n");
+            info("正在下载Yonkers,SysTopPatch0\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers0Str, yonkersPaths[0].c_str()),
-                      "Could not download Yonkers,SysTopPatch0\n");
+                      "无法下载Yonkers,SysTopPatch0\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers1Str) {
@@ -2229,9 +2229,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers1Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[1] = futurerestoreTempPath + "/yonkers1.fw";
-        info("Downloading Yonkers,SysTopPatch1\n\n");
+        info("正在下载Yonkers,SysTopPatch1\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers1Str, yonkersPaths[1].c_str()),
-                  "Could not download Yonkers,SysTopPatch1\n");
+                  "无法下载Yonkers,SysTopPatch1\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers2Str) {
@@ -2240,9 +2240,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers2Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[2] = futurerestoreTempPath + "/yonkers2.fw";
-        info("Downloading Yonkers,SysTopPatch2\n\n");
+        info("正在下载Yonkers,SysTopPatch2\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers2Str, yonkersPaths[2].c_str()),
-                  "Could not download Yonkers,SysTopPatch2\n");
+                  "无法下载Yonkers,SysTopPatch2\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers3Str) {
@@ -2251,9 +2251,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers3Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[3] = futurerestoreTempPath + "/yonkers3.fw";
-        info("Downloading Yonkers,SysTopPatch3\n\n");
+        info("正在下载Yonkers,SysTopPatch3\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers3Str, yonkersPaths[3].c_str()),
-                  "Could not download Yonkers,SysTopPatch3\n");
+                  "无法下载Yonkers,SysTopPatch3\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers4Str) {
@@ -2262,9 +2262,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers4Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[4] = futurerestoreTempPath + "/yonkers4.fw";
-        info("Downloading Yonkers,SysTopPatch4\n\n");
+        info("正在下载Yonkers,SysTopPatch4\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers4Str, yonkersPaths[4].c_str()),
-                  "Could not download Yonkers,SysTopPatch4\n");
+                  "无法下载Yonkers,SysTopPatch4\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers5Str) {
@@ -2273,9 +2273,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers5Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[5] = futurerestoreTempPath + "/yonkers5.fw";
-        info("Downloading Yonkers,SysTopPatch5\n\n");
+        info("正在下载Yonkers,SysTopPatch5\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers5Str, yonkersPaths[5].c_str()),
-                  "Could not download Yonkers,SysTopPatch5\n");
+                  "无法下载Yonkers,SysTopPatch5\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers6Str) {
@@ -2284,9 +2284,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers6Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[6] = futurerestoreTempPath + "/yonkers6.fw";
-        info("Downloading Yonkers,SysTopPatch6\n\n");
+        info("正在下载Yonkers,SysTopPatch6\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers6Str, yonkersPaths[6].c_str()),
-                  "Could not download Yonkers,SysTopPatch6\n");
+                  "无法下载Yonkers,SysTopPatch6\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers7Str) {
@@ -2295,9 +2295,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers7Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[7] = futurerestoreTempPath + "/yonkers7.fw";
-        info("Downloading Yonkers,SysTopPatch7\n\n");
+        info("正在下载Yonkers,SysTopPatch7\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers7Str, yonkersPaths[7].c_str()),
-                  "Could not download Yonkers,SysTopPatch7\n");
+                  "无法下载Yonkers,SysTopPatch7\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers8Str) {
@@ -2306,9 +2306,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers8Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[8] = futurerestoreTempPath + "/yonkers8.fw";
-        info("Downloading Yonkers,SysTopPatch8\n\n");
+        info("正在下载Yonkers,SysTopPatch8\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers8Str, yonkersPaths[8].c_str()),
-                  "Could not download Yonkers,SysTopPatch8\n");
+                  "无法下载Yonkers,SysTopPatch8\n");
     }
     memset(otaString, 0, 1024);
     if (yonkers9Str) {
@@ -2317,9 +2317,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkers9Str = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[9] = futurerestoreTempPath + "/yonkers9.fw";
-        info("Downloading Yonkers,SysTopPatch9\n\n");
+        info("正在下载Yonkers,SysTopPatch9\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkers9Str, yonkersPaths[9].c_str()),
-                  "Could not download Yonkers,SysTopPatch9\n");
+                  "无法下载Yonkers,SysTopPatch9\n");
     }
     memset(otaString, 0, 1024);
     if (yonkersAStr) {
@@ -2328,9 +2328,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkersAStr = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[10] = futurerestoreTempPath + "/yonkersA.fw";
-        info("Downloading Yonkers,SysTopPatchA\n\n");
+        info("正在下载Yonkers,SysTopPatchA\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkersAStr, yonkersPaths[10].c_str()),
-                  "Could not download Yonkers,SysTopPatchA\n");
+                  "无法下载Yonkers,SysTopPatchA\n");
     }
     memset(otaString, 0, 1024);
     if (yonkersBStr) {
@@ -2339,9 +2339,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkersBStr = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[11] = futurerestoreTempPath + "/yonkersB.fw";
-        info("Downloading Yonkers,SysTopPatchB\n\n");
+        info("正在下载Yonkers,SysTopPatchB\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkersBStr, yonkersPaths[11].c_str()),
-                  "Could not download Yonkers,SysTopPatchB\n");
+                  "无法下载Yonkers,SysTopPatchB\n");
     }
     memset(otaString, 0, 1024);
     if (yonkersCStr) {
@@ -2350,9 +2350,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkersCStr = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[12] = futurerestoreTempPath + "/yonkersC.fw";
-        info("Downloading Yonkers,SysTopPatchC\n\n");
+        info("正在下载Yonkers,SysTopPatchC\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkersCStr, yonkersPaths[12].c_str()),
-                  "Could not download Yonkers,SysTopPatchC\n");
+                  "无法下载Yonkers,SysTopPatchC\n");
     }
     memset(otaString, 0, 1024);
     if (yonkersDStr) {
@@ -2361,9 +2361,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkersDStr = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[13] = futurerestoreTempPath + "/yonkersD.fw";
-        info("Downloading Yonkers,SysTopPatchD\n\n");
+        info("正在下载Yonkers,SysTopPatchD\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkersDStr, yonkersPaths[13].c_str()),
-                  "Could not download Yonkers,SysTopPatchD\n");
+                  "无法下载Yonkers,SysTopPatchD\n");
     }
     memset(otaString, 0, 1024);
     if (yonkersEStr) {
@@ -2372,9 +2372,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkersEStr = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[14] = futurerestoreTempPath + "/yonkersE.fw";
-        info("Downloading Yonkers,SysTopPatchE\n\n");
+        info("正在下载Yonkers,SysTopPatchE\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkersEStr, yonkersPaths[14].c_str()),
-                  "Could not download Yonkers,SysTopPatchE\n");
+                  "无法下载Yonkers,SysTopPatchE\n");
     }
     memset(otaString, 0, 1024);
     if (yonkersFStr) {
@@ -2383,9 +2383,9 @@ void futurerestore::downloadLatestYonkers() {
             yonkersFStr = reinterpret_cast<char *>(&otaString);
         }
         yonkersPaths[15] = futurerestoreTempPath + "/yonkersF.fw";
-        info("Downloading Yonkers,SysTopPatchF\n\n");
+        info("正在下载Yonkers,SysTopPatchF\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), yonkersFStr, yonkersPaths[15].c_str()),
-                  "Could not download Yonkers,SysTopPatchF\n");
+                  "无法下载Yonkers,SysTopPatchF\n");
     }
     if (yonkers0Str &&
             yonkers0Str &&
@@ -2415,7 +2415,7 @@ void futurerestore::downloadLatestCryptex1() {
                     "Cryptex1,SystemOS", manifeststr, getDeviceBoardNoCopy(), _useCustomLatestOTA) : nullptr);
     auto *cryptex1SysOSDGSTStr = getDigestOfElementInManifest("Cryptex1,SystemOS", manifeststr, getDeviceBoardNoCopy(),
                                                               _useCustomLatestOTA);
-    info("Checking for cached Cryptex1...\n");
+    info("正在检查已缓存的Cryptex1...\n");
     auto *cryptex1SysOSHash = getSHA(cryptex1SysOSTempPath, ((_client->device->chip_id < 0x8010) ? 3 : 0));
 
     char *cryptex1SysVOLStr = (elemExists("Cryptex1,SystemVolume", manifeststr, getDeviceBoardNoCopy(), 0)
@@ -2457,7 +2457,7 @@ void futurerestore::downloadLatestCryptex1() {
     char otaString[1024]{};
     if (cryptex1SysOSHash && cryptex1SysOSDGSTStr &&
         !memcmp(cryptex1SysOSDGSTStr, cryptex1SysOSHash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-        info("Using cached Cryptex1,SystemOS.\n");
+        info("正在使用已缓存的Cryptex1,SystemOS.\n");
         safeFree(cryptex1SysOSDGSTStr);
         safeFree(cryptex1SysOSHash);
     } else {
@@ -2466,14 +2466,14 @@ void futurerestore::downloadLatestCryptex1() {
                 snprintf(otaString, 1024, "%s%s", "AssetData/boot/", cryptex1SysOSStr);
                 cryptex1SysOSStr = reinterpret_cast<char *>(&otaString);
             }
-            info("Downloading Cryptex1,SystemOS dmg(this may take a while)\n\n");
+            info("正在下载Cryptex1,SystemOS dmg(这需要一点时间)\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), cryptex1SysOSStr, cryptex1SysOSTempPath.c_str()),
-                      "Could not download Cryptex1,SystemOS\n");
+                      "无法下载Cryptex1,SystemOS\n");
         }
     }
     if (cryptex1SysVOLHash && cryptex1SysVOLDGSTStr &&
         !memcmp(cryptex1SysVOLDGSTStr, cryptex1SysVOLHash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-        info("Using cached Cryptex1,SystemVolume.\n");
+        info("正在使用已缓存的Cryptex1,SystemVolume.\n");
         safeFree(cryptex1SysVOLDGSTStr);
         safeFree(cryptex1SysVOLHash);
     } else {
@@ -2482,14 +2482,14 @@ void futurerestore::downloadLatestCryptex1() {
                 snprintf(otaString, 1024, "%s%s", "AssetData/boot/", cryptex1SysVOLStr);
                 cryptex1SysVOLStr = reinterpret_cast<char *>(&otaString);
             }
-            info("Downloading Cryptex1,SystemVolume root_hash\n\n");
+            info("正在下载Cryptex1,SystemVolume root_hash\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), cryptex1SysVOLStr, cryptex1SysVOLTempPath.c_str()),
-                      "Could not download Cryptex1,SystemVolume\n");
+                      "无法下载Cryptex1,SystemVolume\n");
         }
     }
     if (cryptex1SysTCHash && cryptex1SysTCDGSTStr &&
         !memcmp(cryptex1SysTCDGSTStr, cryptex1SysTCHash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-        info("Using cached Cryptex1,SystemTrustCache.\n");
+        info("正在使用已缓存的Cryptex1,SystemTrustCache.\n");
         safeFree(cryptex1SysTCDGSTStr);
         safeFree(cryptex1SysTCHash);
     } else {
@@ -2498,14 +2498,14 @@ void futurerestore::downloadLatestCryptex1() {
                 snprintf(otaString, 1024, "%s%s", "AssetData/boot/", cryptex1SysTCStr);
                 cryptex1SysTCStr = reinterpret_cast<char *>(&otaString);
             }
-            info("Downloading Cryptex1,SystemTrustCache\n\n");
+            info("正在下载Cryptex1,SystemTrustCache\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), cryptex1SysTCStr, cryptex1SysTCTempPath.c_str()),
-                      "Could not download Cryptex1,SystemTrustCache\n");
+                      "无法下载Cryptex1,SystemTrustCache\n");
         }
     }
     if (cryptex1AppOSHash && cryptex1AppOSDGSTStr &&
         !memcmp(cryptex1AppOSDGSTStr, cryptex1AppOSHash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-        info("Using cached Cryptex1,AppOS.\n");
+        info("正在使用已缓存的Cryptex1,AppOS.\n");
         safeFree(cryptex1AppOSDGSTStr);
         safeFree(cryptex1AppOSHash);
     } else {
@@ -2514,14 +2514,14 @@ void futurerestore::downloadLatestCryptex1() {
                 snprintf(otaString, 1024, "%s%s", "AssetData/boot/", cryptex1AppOSStr);
                 cryptex1AppOSStr = reinterpret_cast<char *>(&otaString);
             }
-            info("Downloading Cryptex1,AppOS dmg\n\n");
+            info("正在下载Cryptex1,AppOS dmg\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), cryptex1AppOSStr, cryptex1AppOSTempPath.c_str()),
-                      "Could not download Cryptex1,AppOS\n");
+                      "无法下载Cryptex1,AppOS\n");
         }
     }
     if (cryptex1AppVOLHash && cryptex1AppVOLDGSTStr &&
         !memcmp(cryptex1AppVOLDGSTStr, cryptex1AppVOLHash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-        info("Using cached Cryptex1,AppVolume.\n");
+        info("正在使用已缓存的Cryptex1,AppVolume.\n");
         safeFree(cryptex1AppVOLDGSTStr);
         safeFree(cryptex1AppVOLHash);
     } else {
@@ -2530,13 +2530,13 @@ void futurerestore::downloadLatestCryptex1() {
                 snprintf(otaString, 1024, "%s%s", "AssetData/boot/", cryptex1AppVOLStr);
                 cryptex1AppVOLStr = reinterpret_cast<char *>(&otaString);
             }
-            info("Downloading Cryptex1,AppVolume root_hash\n\n");
+            info("正在下载Cryptex1,AppVolume root_hash\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), cryptex1AppVOLStr, cryptex1AppVOLTempPath.c_str()),
-                      "Could not download Cryptex1,AppVolume\n");
+                      "无法下载Cryptex1,AppVolume\n");
         }
     }
     if(cryptex1AppTCHash && cryptex1AppTCDGSTStr && !memcmp(cryptex1AppTCDGSTStr, cryptex1AppTCHash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-        info("Using cached Cryptex1,AppTrustCache.\n");
+        info("正在使用已缓存的Cryptex1,AppTrustCache.\n");
         safeFree(cryptex1AppTCDGSTStr);
         safeFree(cryptex1AppTCHash);
     } else {
@@ -2545,16 +2545,16 @@ void futurerestore::downloadLatestCryptex1() {
                 snprintf(otaString, 1024, "%s%s", "AssetData/boot/", cryptex1AppTCStr);
                 cryptex1AppTCStr = reinterpret_cast<char *>(&otaString);
             }
-            info("Downloading Cryptex1,AppTrustCache\n\n");
+            info("正在下载Cryptex1,AppTrustCache\n\n");
             retassure(!downloadPartialzip(getLatestFirmwareUrl(), cryptex1AppTCStr, cryptex1AppTCTempPath.c_str()),
-                      "Could not download Cryptex1,AppTrustCache\n");
+                      "无法下载Cryptex1,AppTrustCache\n");
         }
     }
     loadCryptex1(cryptex1SysOSTempPath, cryptex1SysVOLTempPath, cryptex1SysTCTempPath, cryptex1AppOSTempPath, cryptex1AppVOLTempPath, cryptex1AppTCTempPath);
 }
 
 void futurerestore::downloadLatestFirmwareComponents() {
-    info("Downloading the latest firmware components...\n");
+    info("正在下载最新的固件组件...\n");
     char *manifeststr = getLatestManifest();
     if (elemExists("Rap,RTKitOS", manifeststr, getDeviceBoardNoCopy(), 0))
         downloadLatestRose();
@@ -2579,7 +2579,7 @@ void futurerestore::downloadLatestFirmwareComponents() {
         downloadLatestYonkers();
     if (elemExists("Cryptex1,SystemOS", manifeststr, getDeviceBoardNoCopy(), 0))
         downloadLatestCryptex1();
-    info("Finished downloading the latest firmware components!\n");
+    info("已完成下载最新的固件组件！\n");
 }
 
 void futurerestore::downloadLatestBaseband() {
@@ -2596,7 +2596,7 @@ void futurerestore::downloadLatestBaseband() {
         if(bbcfgData != nullptr) {
             auto *hash = getSHABuffer((char *) bbcfgData, basebandSize, 1);
             if(hash && bbcfgDigestString && !memcmp(bbcfgDigestString, hash, 32)) {
-                info("Using cached Baseband.\n");
+                info("正在使用已缓存的基带\n");
                 safeFree(bbcfgDigestString);
                 safeFree(hash);
                 cached = true;
@@ -2609,9 +2609,9 @@ void futurerestore::downloadLatestBaseband() {
             snprintf(otaString, 1024, "%s%s", "AssetData/boot/", pathStr);
             pathStr = reinterpret_cast<char *>(&otaString);
         }
-        info("Downloading Baseband\n\n");
+        info("正在下载基带\n\n");
         retassure(!downloadPartialzip(getLatestFirmwareUrl(), pathStr, basebandTempPath.c_str()),
-                  "Could not download baseband\n");
+                  "无法下载基带\n");
     }
     setBasebandPath(basebandTempPath);
     setBasebandManifestPath(basebandManifestTempPath);
@@ -2626,7 +2626,7 @@ void futurerestore::downloadLatestSep() {
     auto *digestString = getDigestOfElementInManifest("SEP",manifestString.c_str(), getDeviceBoardNoCopy(), _useCustomLatestOTA);
     auto *hash = getSHA(sepTempPath, ((_client->device->chip_id < 0x8010) ? 3 : 0));
     if(hash && digestString && !memcmp(digestString, hash, ((_client->device->chip_id < 0x8010) ? 20 : 48))) {
-        info("Using cached SEP.\n");
+        info("正在使用已缓存的SEP\n");
         safeFree(digestString);
         safeFree(hash);
     } else {
@@ -2636,8 +2636,8 @@ void futurerestore::downloadLatestSep() {
                 snprintf(otaString, 1024, "%s%s", "AssetData/boot/", pathString);
                 pathString = reinterpret_cast<char *>(&otaString);
             }
-            info("Downloading SEP\n\n");
-            retassure(!downloadPartialzip(getLatestFirmwareUrl(), pathString, sepTempPath.c_str()), "Could not download SEP\n");
+            info("正在下载SEP\n\n");
+            retassure(!downloadPartialzip(getLatestFirmwareUrl(), pathString, sepTempPath.c_str()), "无法下载SEP\n");
         }
     }
     setSepPath(sepTempPath);
@@ -2649,13 +2649,13 @@ void futurerestore::downloadLatestSep() {
 void futurerestore::loadSepManifest(const std::string& sepManifestPath) {
     this->_sepManifestPath = sepManifestPath;
     retassure(_sepbuildmanifest = loadPlistFromFile(sepManifestPath.c_str()),
-              "Failed to load SEP Manifest");
+              "加载SEP Manifest失败");
 }
 
 void futurerestore::loadBasebandManifest(const std::string& basebandManifestPath) {
     this->_basebandManifestPath = basebandManifestPath;
     retassure(_basebandbuildmanifest = loadPlistFromFile(basebandManifestPath.c_str()),
-              "Failed to load Baseband Manifest");
+              "加载基带 Manifest失败");
 };
 
 void futurerestore::loadRose(const std::string& rosePath) const {
@@ -2664,7 +2664,7 @@ void futurerestore::loadRose(const std::string& rosePath) const {
     _client->rosefwdatasize = futurerestore::getFileSize(rosePath);
     std::allocator<uint8_t> alloc;
     retassure(_client->rosefwdata = (char *)alloc.allocate(_client->rosefwdatasize),
-              "%s: failed to allocate memory for %s\n", __func__, rosePath.c_str());
+              "%s: 无法为%s分配内存\n", __func__, rosePath.c_str());
     roseFileStream.read((char *) _client->rosefwdata,
                           (std::streamsize) _client->rosefwdatasize);
     retassure(roseFileStream.good(), "%s: failed to read file stream for %s!\n", __func__, rosePath.c_str());
@@ -3074,7 +3074,7 @@ unsigned char *futurerestore::getSHA(const std::string& filePath, int type) {
     }
     size_t dataSize = futurerestore::getFileSize(filePath);
     if(!dataSize) {
-        error("%s: failed to get file size for %s\n", __func__, filePath.c_str());
+        error("%s: 无法获取%s文件大小\n", __func__, filePath.c_str());
         return nullptr;
     }
     std::allocator<uint8_t> alloc;
@@ -3083,18 +3083,18 @@ unsigned char *futurerestore::getSHA(const std::string& filePath, int type) {
       data = (char *) alloc.allocate(8);
     } catch(std::bad_alloc const&) {
         if(!data) {
-            error("%s: failed to allocate memory for %s\n", __func__, filePath.c_str());
+            error("%s: 无法为%s分配内存\n", __func__, filePath.c_str());
             throw;
         }
     }
     if(!data) {
-      error("%s: failed to allocate memory for %s\n", __func__, filePath.c_str());
+      error("%s: 无法为%s分配内存\n", __func__, filePath.c_str());
       return nullptr;
     }
     fileStream.read((char *) data,
                        (std::streamsize) 8);
     if(!fileStream.good()) {
-        info("Failed to read cached file %s, downloading a new one.\n", filePath.c_str());
+        info("读取缓存文件%s, 正在下载新的文件\n", filePath.c_str());
         return nullptr;
     }
     if(*(uint64_t *)(data) == 0) {
@@ -3110,7 +3110,7 @@ unsigned char *futurerestore::getSHA(const std::string& filePath, int type) {
 
 inline void futurerestore::saveStringToFile(std::string &str, std::string &path) {
     if(str.empty() || path.empty()) {
-        info("%s: No data to save!\n", __func__);
+        info("%s: 没有要保存的数据！\n", __func__);
         return;
     }
     std::ofstream fileStream(path, std::ios::out | std::ios::binary);
@@ -3341,7 +3341,7 @@ std::string futurerestore::getGeneratorFromSHSH2(plist_t shsh2) {
 #ifndef WIN32
 
 void futurerestore::checkForUpdates() {
-    info("Checking for updates...\n");
+    info("正在检查更新...\n");
     std::string url = "https://nightly.link/futurerestore/futurerestore/workflows/ci/main/Versioning.zip";
     bool fail = false;
     char *buffer = nullptr;
@@ -3376,7 +3376,7 @@ void futurerestore::checkForUpdates() {
     }
 
     if(this->latest_num.empty() || this->latest_sha.empty() || fail) {
-        info("ERROR: failed to check for futurerestore updates! continuing...\n");
+        info("错误: 无法检查futurerestore更新，正在继续...\n");
         return;
     }
     bool updated = false;
@@ -3384,14 +3384,14 @@ void futurerestore::checkForUpdates() {
        updated = true;
     } else {
         if (std::stoi(this->current_num) < std::stoi(this->latest_num)) {
-            info("Error: Futurerestore is outdated! Please download the latest futurerestore! exitting...\n");
+            info("错误: Futurerestore已经过时了！请下载最新版本，正在退出...\n");
             exit(-1);
         } else {
             updated = true;
         }
     }
     if(updated) {
-        info("Futurerestore is up to date!\n");
+        info("Futurerestore是最新版本！\n");
     }
 }
 
